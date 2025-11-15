@@ -1,0 +1,24 @@
+
+#version 450
+layout(local_size_x = 8, local_size_y = 4) in;
+layout(binding = 0) readonly buffer Src { uint data[]; } src;
+layout(binding = 1, rgba16f) writeonly uniform image2D dst;
+layout(push_constant) uniform PC { uint width; uint height; uint blocksPerRow; } pc;
+uint read_u32(uint idx) { return src.data[idx]; }
+void main() {
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    uint bx = gid.x; uint by = gid.y;
+    uint bi = by * pc.blocksPerRow + bx;
+    uint w0 = read_u32(bi*4u+0u);
+    uint w1 = read_u32(bi*4u+1u);
+    uint w2 = read_u32(bi*4u+2u);
+    uint w3 = read_u32(bi*4u+3u);
+    float r = float((w0 ^ w1) & 0xFFu)/255.0 * 4.0;
+    float g = float((w2 ^ w3) & 0xFFu)/255.0 * 4.0;
+    float b = float(((w0>>8) ^ (w3>>8)) & 0xFFu)/255.0 * 4.0;
+    vec4 col = vec4(r,g,b,1.0);
+    for(int y=0;y<4;y++) for(int x=0;x<4;x++) {
+        ivec2 p = ivec2(int(bx*4u + uint(x)), int(by*4u + uint(y)));
+        if(p.x < int(pc.width) && p.y < int(pc.height)) imageStore(dst, p, col);
+    }
+}
