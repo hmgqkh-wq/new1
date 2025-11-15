@@ -1,0 +1,33 @@
+
+#version 450
+layout(local_size_x = 8, local_size_y = 4) in;
+layout(binding = 0) readonly buffer Src { uint data[]; } src;
+layout(binding = 1, rgba8) writeonly uniform image2D dst;
+layout(push_constant) uniform PC { uint width; uint height; uint blocksPerRow; } pc;
+uint read_u32(uint idx) { return src.data[idx]; }
+uint expand5(uint v) { return (v << 3) | (v >> 2); }
+uint expand6(uint v) { return (v << 2) | (v >> 4); }
+vec4 decode_rgb565(uint v) { uint r = expand5((v >> 11) & 0x1Fu); uint g = expand6((v >> 5) & 0x3Fu); uint b = expand5(v & 0x1Fu); return vec4(float(r)/255.0, float(g)/255.0, float(b)/255.0, 1.0); }
+void main() {
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    uint bx = gid.x; uint by = gid.y;
+    uint bi = by * pc.blocksPerRow + bx;
+    uint a0 = read_u32(bi*4u+0u);
+    uint c0 = read_u32(bi*4u+1u);
+    uint c1 = read_u32(bi*4u+2u);
+    uint bits = read_u32(bi*4u+3u);
+    for(int y=0;y<4;y++) for(int x=0;x<4;x++) {
+        int aidx = (y*4 + x)*4;
+        uint aval = (a0 >> aidx) & 0xFu;
+        float a = float((aval<<4)|aval)/255.0;
+        int bit = (y*4 + x)*2;
+        uint idx = (bits >> bit) & 0x3u;
+        vec4 col0 = decode_rgb565(c0 & 0xFFFFu);
+        vec4 col1 = decode_rgb565((c0 >> 16) & 0xFFFFu);
+        vec4 outc;
+        if(idx==0u) outc=col0; else if(idx==1u) outc=col1; else if(idx==2u) outc=vec4((2.0*col0.rgb+col1.rgb)/3.0,1.0); else outc=vec4((col0.rgb+2.0*col1.rgb)/3.0,1.0);
+        outc.a = a;
+        ivec2 p = ivec2(int(bx*4u + uint(x)), int(by*4u + uint(y)));
+        if(p.x < int(pc.width) && p.y < int(pc.height)) imageStore(dst, p, outc);
+    }
+}
