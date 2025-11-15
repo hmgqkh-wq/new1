@@ -1,0 +1,14 @@
+
+#version 450
+layout(local_size_x = 16, local_size_y = 4) in;
+layout(binding = 0) readonly buffer Src { uint data[]; } src;
+layout(binding = 1, std430) writeonly buffer Dst { uint outData[]; } dst;
+layout(push_constant) uniform PC { uint blocks; } pc;
+void main() {
+    uint idx = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_WorkGroupSize.x;
+    if(idx >= pc.blocks) return;
+    dst.outData[idx*4+0] = src.data[idx*4+0];
+    dst.outData[idx*4+1] = src.data[idx*4+1];
+    dst.outData[idx*4+2] = src.data[idx*4+2];
+    dst.outData[idx*4+3] = src.data[idx*4+3];
+}
